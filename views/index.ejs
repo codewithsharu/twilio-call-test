@@ -79,6 +79,12 @@
     <div class="container">
         <h1>🔊 Twilio Free Trial Voice Call</h1>
 
+        <% if (message) { %>
+            <div class="info">
+                <h3><%= message %></h3>
+            </div>
+        <% } %>
+
         <form action="/make-call" method="POST">
             <label for="phone">Enter Verified Phone Number:</label>
             <input type="text" id="phone" name="phone" placeholder="+91XXXXXXXXX or +1XXXXXXXXXX" required>

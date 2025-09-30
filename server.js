@@ -10,9 +10,8 @@ const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TO
 
 // Render HTML page
 app.get('/', (req, res) => {
-    res.render('index');
+    res.render('index', { message: null }); // send empty message by default
 });
-
 
 // Endpoint to make call
 app.post('/make-call', async (req, res) => {
@@ -24,7 +23,7 @@ app.post('/make-call', async (req, res) => {
 
     try {
         let callResult = await client.calls.create({
-            url: process.env.TWILIO_CALL_URL,
+            url: process.env.TWILIO_CALL_URL,  // must be your /voice endpoint
             to: phone,
             from: process.env.TWILIO_NUMBER
         });
@@ -37,7 +36,8 @@ app.post('/make-call', async (req, res) => {
 // Twilio webhook for voice instructions
 app.post('/voice', (req, res) => {
     const twiml = new twilio.twiml.VoiceResponse();
-    twiml.say('Hello! This is a test call from your Twilio free trial account.');
+    // twiml.say('Hello! This is a test call from your Twilio free trial account.');
+    twiml.dial({ callerId: process.env.TWILIO_NUMBER }, req.body.From);
     res.type('text/xml');
     res.send(twiml.toString());
 });
