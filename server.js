@@ -13,21 +13,24 @@ app.get('/', (req, res) => {
     res.render('index');
 });
 
+
 // Endpoint to make call
 app.post('/make-call', async (req, res) => {
     const { phone } = req.body;
 
-    if (!phone) return res.send('Please provide a phone number');
+    if (!phone) {
+        return res.render('index', { message: '❌ Please provide a phone number' });
+    }
 
     try {
-     
-        res.send(`Call initiated! Call SID: ${call.sid}`);   const call = await client.calls.create({
-            url: process.env.TWILIO_CALL_URL, // replace with your deployed server URL
+        let callResult = await client.calls.create({
+            url: process.env.TWILIO_CALL_URL,
             to: phone,
             from: process.env.TWILIO_NUMBER
         });
+        return res.render('index', { message: `✅ Call initiated! Call SID: ${callResult.sid}` });
     } catch (err) {
-        res.send(`Error: ${err.message}`);
+        return res.render('index', { message: `❌ Error: ${err.message}` });
     }
 });
 
