@@ -1,76 +1,99 @@
+
 require('dotenv').config();
+
 const express = require('express');
 const twilio = require('twilio');
-const { AccessToken, VoiceGrant } = twilio.jwt.AccessToken;
 const app = express();
+const port = 3000;
+
+// Load Twilio credentials and config from environment variables
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const twilioPhoneNumber = process.env.TWILIO_NUMBER;
+const twilioCallUrl = process.env.TWILIO_CALL_URL;
+// Optional: You can add TWILIO_AGENT_NUMBER to .env if you want to use it
+const twilioAgentNumber = process.env.TWILIO_AGENT_NUMBER || '+917816072525'; // fallback if not set
+
+const client = new twilio.Twilio(accountSid, authToken);
 
 app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: false }));
+app.use(express.static('public'));
 
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-
-// Render HTML page
 app.get('/', (req, res) => {
-    res.render('index', { message: null }); // send empty message by default
+  res.render('index', { phoneNumber: twilioPhoneNumber });
 });
 
-// Endpoint to make call
-app.post('/make-call', async (req, res) => {
-    const { phone } = req.body;
-
-    if (!phone) {
-        return res.render('index', { message: '❌ Please provide a phone number' });
-    }
-
-    try {
-        let callResult = await client.calls.create({
-            url: process.env.TWILIO_CALL_URL,  // must be your /voice endpoint
-            to: phone,
-            from: process.env.TWILIO_NUMBER
-        });
-        return res.render('index', { message: `✅ Call initiated! Call SID: ${callResult.sid}` });
-    } catch (err) {
-        return res.render('index', { message: `❌ Error: ${err.message}` });
-    }
-});
-
-// Endpoint to generate Twilio Access Token
-app.get('/token', (req, res) => {
-    // Get the identity from the query string or generate a random one
-    const identity = req.query.identity || 'browser_client';
-
-    // Create an Access Token
-    const accessToken = new AccessToken(
-        process.env.TWILIO_ACCOUNT_SID,
-        process.env.TWILIO_API_KEY_SID,
-        process.env.TWILIO_API_KEY_SECRET,
-        {
-            identity: identity
-        }
-    );
-
-    // Create a Voice Grant and add to the token
-    const voiceGrant = new VoiceGrant({
-        outgoingApplicationSid: process.env.TWILIO_TWIML_APP_SID,
-        incomingAllow: true,
-    });
-    accessToken.addGrant(voiceGrant);
-
-    // Serialize the token to a JWT string
-    res.send({
-        identity: identity,
-        token: accessToken.toJwt(),
-    });
-});
-
-// Twilio webhook for voice instructions
 app.post('/voice', (req, res) => {
-    const twiml = new twilio.twiml.VoiceResponse();
-    // twiml.say('Hello! This is a test call from your Twilio free trial account.');
-    twiml.dial({ callerId: process.env.TWILIO_NUMBER }, req.body.From);
-    res.type('text/xml');
-    res.send(twiml.toString());
+  const twiml = new twilio.twiml.VoiceResponse();
+
+  // When a call comes in, say something and then gather input
+  twiml.say('Hello from your Node.js Twilio application! Please say something after the beep.');
+  twiml.record({
+    timeout: 10,
+    action: '/handle-recording',
+    method: 'POST'
+  });
+
+  res.type('text/xml');
+  res.send(twiml.toString());
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.post('/handle-recording', (req, res) => {
+  const twiml = new twilio.twiml.VoiceResponse();
+
+  if (req.body.RecordingUrl) {
+    twiml.say('Thanks for your message. You said:');
+    twiml.play(req.body.RecordingUrl);
+  } else {
+    twiml.say('No recording received.');
+  }
+
+  twiml.say('Goodbye!');
+  res.type('text/xml');
+  res.send(twiml.toString());
+});
+
+app.post('/make-call', (req, res) => {
+  const to = req.body.to;
+  const connectTo = req.body.connectTo;
+
+  if (!connectTo) {
+    return res.status(400).send('Missing connectTo number.');
+  }
+
+  client.calls.create({
+    url: `${twilioCallUrl}twiml?connectTo=${encodeURIComponent(connectTo)}`, // Pass connectTo as a query parameter
+    to: to,
+    from: twilioPhoneNumber
+  })
+  .then((call) => {
+    console.log(call.sid);
+    res.send(`Calling ${to}... Connecting to ${connectTo}...`);
+  })
+  .catch((err) => {
+    console.error(err);
+    res.status(500).send('Error making call');
+  });
+});
+
+app.post('/twiml', (req, res) => {
+  const twiml = new twilio.twiml.VoiceResponse();
+  const connectToNumber = req.query.connectTo; // Get connectTo from query parameter
+
+  twiml.say('You are connected to the Twilio two-way call application. Please wait while we connect you.');
+  
+  if (connectToNumber) {
+    twiml.dial(connectToNumber);
+  } else {
+    twiml.say('No number to connect to, hanging up.');
+    twiml.hangup();
+  }
+
+  res.type('text/xml');
+  res.send(twiml.toString());
+});
+
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});
