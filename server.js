@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const twilio = require('twilio');
+const { AccessToken, VoiceGrant } = twilio.jwt.AccessToken;
 const app = express();
 
 app.set('view engine', 'ejs');
@@ -31,6 +32,35 @@ app.post('/make-call', async (req, res) => {
     } catch (err) {
         return res.render('index', { message: `❌ Error: ${err.message}` });
     }
+});
+
+// Endpoint to generate Twilio Access Token
+app.get('/token', (req, res) => {
+    // Get the identity from the query string or generate a random one
+    const identity = req.query.identity || 'browser_client';
+
+    // Create an Access Token
+    const accessToken = new AccessToken(
+        process.env.TWILIO_ACCOUNT_SID,
+        process.env.TWILIO_API_KEY_SID,
+        process.env.TWILIO_API_KEY_SECRET,
+        {
+            identity: identity
+        }
+    );
+
+    // Create a Voice Grant and add to the token
+    const voiceGrant = new VoiceGrant({
+        outgoingApplicationSid: process.env.TWILIO_TWIML_APP_SID,
+        incomingAllow: true,
+    });
+    accessToken.addGrant(voiceGrant);
+
+    // Serialize the token to a JWT string
+    res.send({
+        identity: identity,
+        token: accessToken.toJwt(),
+    });
 });
 
 // Twilio webhook for voice instructions

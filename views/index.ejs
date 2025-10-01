@@ -74,10 +74,30 @@
             margin: 5px 0;
         }
     </style>
+    <script type="text/javascript" src="//js.twilio.com/v1/twilio.min.js"></script>
 </head>
 <body>
     <div class="container">
         <h1>🔊 Twilio Free Trial Voice Call</h1>
+
+        <div id="call-controls">
+            <p>Twilio.Device Ready? <span id="status">No</span></p>
+
+            <form action="#" id="call-form">
+                <label for="phone-number">Call a number:</label>
+                <input type="text" id="phone-number" placeholder="+91XXXXXXXXX or +1XXXXXXXXXX">
+                <button id="call-button" type="button">Call</button>
+            </form>
+
+            <div id="incoming-call-div" style="display: none;">
+                <h2>Incoming Call!</h2>
+                <p>From: <span id="incoming-call-from"></span></p>
+                <button id="answer-button">Answer</button>
+                <button id="reject-button">Reject</button>
+            </div>
+
+            <button id="hangup-button" style="display: none;">Hangup</button>
+        </div>
 
         <% if (message) { %>
             <div class="info">
@@ -85,10 +105,10 @@
             </div>
         <% } %>
 
-        <form action="/make-call" method="POST">
+        <form action="/make-call" method="POST" style="display: none;">
             <label for="phone">Enter Verified Phone Number:</label>
             <input type="text" id="phone" name="phone" placeholder="+91XXXXXXXXX or +1XXXXXXXXXX" required>
-            <button type="submit">📞 Make Call</button>
+            <button type="submit">📞 Make Call (Server-side)</button>
         </form>
 
         <div class="info">
@@ -113,5 +133,108 @@
             </ul>
         </div>
     </div>
+
+    <script>
+        const statusSpan = document.getElementById('status');
+        const callButton = document.getElementById('call-button');
+        const hangupButton = document.getElementById('hangup-button');
+        const incomingCallDiv = document.getElementById('incoming-call-div');
+        const incomingCallFromSpan = document.getElementById('incoming-call-from');
+        const answerButton = document.getElementById('answer-button');
+        const rejectButton = document.getElementById('reject-button');
+        const phoneNumberInput = document.getElementById('phone-number');
+
+        let device;
+        let activeCall;
+
+        // Fetch token and initialize Twilio Device
+        async function initializeDevice() {
+            try {
+                const response = await fetch('/token');
+                const data = await response.json();
+                const token = data.token;
+
+                device = new Twilio.Device(token, {
+                    enableRinging: true,
+                    debug: true,
+                });
+
+                device.on('ready', () => {
+                    statusSpan.textContent = 'Yes';
+                    console.log('Twilio.Device is ready!');
+                });
+
+                device.on('error', (error) => {
+                    statusSpan.textContent = 'Error';
+                    console.error('Twilio.Device Error: ', error);
+                });
+
+                device.on('incoming', (call) => {
+                    activeCall = call;
+                    incomingCallFromSpan.textContent = call.parameters.From;
+                    incomingCallDiv.style.display = 'block';
+                    hangupButton.style.display = 'block';
+                    console.log('Incoming call from:', call.parameters.From);
+                });
+
+                device.on('disconnect', (connection) => {
+                    console.log('Call disconnected');
+                    activeCall = null;
+                    hangupButton.style.display = 'none';
+                    incomingCallDiv.style.display = 'none';
+                });
+
+            } catch (error) {
+                console.error('Error initializing Twilio Device: ', error);
+                statusSpan.textContent = 'Error';
+            }
+        }
+
+        // Make a call
+        callButton.addEventListener('click', () => {
+            const phoneNumber = phoneNumberInput.value;
+            if (phoneNumber) {
+                console.log('Making call to:', phoneNumber);
+                const params = { To: phoneNumber };
+                activeCall = device.connect(params);
+                hangupButton.style.display = 'block';
+            }
+        });
+
+        // Answer an incoming call
+        answerButton.addEventListener('click', () => {
+            if (activeCall) {
+                activeCall.accept();
+                incomingCallDiv.style.display = 'none';
+                console.log('Call answered');
+            }
+        });
+
+        // Reject an incoming call
+        rejectButton.addEventListener('click', () => {
+            if (activeCall) {
+                activeCall.reject();
+                incomingCallDiv.style.display = 'none';
+                hangupButton.style.display = 'none';
+                console.log('Call rejected');
+            }
+        });
+
+        // Hang up a call
+        hangupButton.addEventListener('click', () => {
+            if (activeCall) {
+                activeCall.disconnect();
+            } else if (device) {
+                device.disconnectAll();
+            }
+            hangupButton.style.display = 'none';
+            incomingCallDiv.style.display = 'none';
+            console.log('Call hung up');
+        });
+
+        // Initialize device on page load
+        initializeDevice();
+
+    </script>
 </body>
 </html>
